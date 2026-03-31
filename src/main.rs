@@ -30,6 +30,7 @@ fn main() -> eframe::Result {
 #[derive(Default)]
 struct Modals {
     about: bool,
+    controls: bool,
 }
 
 struct Prospekt {
@@ -68,6 +69,10 @@ impl eframe::App for Prospekt {
                         ));
                     }
 
+                    if ui.button("Controls...").clicked() {
+                        self.modals.controls = true;
+                    }
+
                     if ui.button("About...").clicked() {
                         self.modals.about = true;
                     }
@@ -86,7 +91,6 @@ impl eframe::App for Prospekt {
 
                     let mut i: usize = 0;
                     let mut buffer: Vec<egui::Color32> = vec![];
-                    // while i < vtf.thumbnail.len() - 2 {
                     // TODO: add support for looking at mipmaps/frames
                     // also note to self: fix weird index bug :p
                     while i < vtf.texture.data[1][1].len() {
@@ -113,26 +117,56 @@ impl eframe::App for Prospekt {
                         },
                     );
 
+                    i = 0;
+                    buffer = vec![];
+                    while i < vtf.thumbnail.len() - 2 {
+                        buffer.push(egui::Color32::from_rgb(
+                            vtf.thumbnail[i] as u8,
+                            vtf.thumbnail[i + 1] as u8,
+                            vtf.thumbnail[i + 2] as u8,
+                        ));
+                        i += 4;
+                    }
+
+                    let thumbnail = ui.ctx().load_texture(
+                        string.as_str(),
+                        egui::ColorImage {
+                            size: [vtf.thumbnail_width as usize, vtf.thumbnail_height as usize],
+                            source_size: egui::vec2(
+                                vtf.thumbnail_width.into(),
+                                vtf.thumbnail_height.into(),
+                            ),
+                            pixels: buffer,
+                        },
+                        egui::TextureOptions {
+                            magnification: egui::TextureFilter::Nearest,
+                            minification: egui::TextureFilter::Nearest,
+                            wrap_mode: egui::TextureWrapMode::Repeat,
+                            mipmap_mode: None,
+                        },
+                    );
+
                     self.dock_state.push_to_focused_leaf(Tab {
                         id: self.dock_state.surfaces_count() as u16,
                         vtf: Some(vtf),
                         texture: Some(texture),
+                        thumbnail: Some(thumbnail),
                         view_zoom: 1.0,
                         filename: format!("{}", &path.file_name().unwrap().display()),
                     });
                 }
             }
 
-            egui_dock::DockArea::new(&mut self.dock_state)
-                .show_leaf_collapse_buttons(false)
-                .style(egui_dock::Style::from_egui(ui.style().as_ref()))
-                .show_inside(ui, &mut MainTabViewer);
-
             if self.dock_state.main_surface().num_tabs() == 0 {
                 ui.centered_and_justified(|ui| {
                     ui.heading("No files open");
                 });
             }
+
+            egui_dock::DockArea::new(&mut self.dock_state)
+                .show_leaf_collapse_buttons(false)
+                .style(egui_dock::Style::from_egui(ui.style().as_ref()))
+                .show_inside(ui, &mut MainTabViewer);
         });
     }
 }
