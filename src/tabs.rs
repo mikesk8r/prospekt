@@ -1,9 +1,9 @@
-use eframe::egui::{self, Modifiers, Ui, Vec2};
+use eframe::egui::{self, Ui};
 use egui_dock::TabViewer;
 use headcrab_vtf::VTF;
 
 pub struct Tab {
-    pub id: u16,
+    // pub id: u16,
     pub filename: String,
     pub vtf: Option<VTF<u16>>,
     pub texture: Option<egui::TextureHandle>,
@@ -11,7 +11,9 @@ pub struct Tab {
     pub view_zoom: f32,
 }
 
-pub struct MainTabViewer;
+pub struct MainTabViewer {
+    pub focused_tab: Option<String>,
+}
 
 impl TabViewer for MainTabViewer {
     // This associated type is used to attach some data to each tab.
@@ -126,5 +128,6 @@ impl TabViewer for MainTabViewer {
                 }
             });
         }
+        self.focused_tab = Some(tab.filename.clone());
     }
 }

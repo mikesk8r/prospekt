@@ -1,11 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![expect(rustdoc::missing_crate_level_docs)] // it's an example
 
-use std::path::PathBuf;
-
+use discord_rich_presence::DiscordIpc;
 use eframe::egui;
 
 mod modals;
+mod presence;
 mod tabs;
 
 use tabs::*;
@@ -15,16 +15,32 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 360.0]),
         ..Default::default()
     };
-    eframe::run_native(
+    let mut rpc = discord_rich_presence::DiscordIpcClient::new("1488668810906046515");
+
+    let _ = rpc.connect();
+    let activity = discord_rich_presence::activity::Activity::new()
+        .buttons(vec![discord_rich_presence::activity::Button::new(
+            "GitHub",
+            "https://github.com/mikesk8r/prospekt",
+        )])
+        .state("No files open");
+    let _ = rpc.set_activity(activity);
+    let result = eframe::run_native(
         "Prospekt",
         options,
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
-            Ok(Box::<Prospekt>::default())
+            let mut application = Prospekt::default();
+            application.rpc = Some(&mut rpc);
+
+            Ok(Box::from(application))
         }),
-    )
+    );
+    let _ = rpc.clear_activity();
+    let _ = rpc.close();
+    result
 }
 
 #[derive(Default)]
@@ -33,23 +49,25 @@ struct Modals {
     controls: bool,
 }
 
-struct Prospekt {
+struct Prospekt<'a> {
     dock_state: egui_dock::DockState<Tab>,
     file_dialog: egui_file_dialog::FileDialog,
+    pub rpc: Option<&'a mut discord_rich_presence::DiscordIpcClient>,
     modals: Modals,
 }
 
-impl Default for Prospekt {
+impl<'a> Default for Prospekt<'a> {
     fn default() -> Self {
         Self {
             dock_state: egui_dock::DockState::new(vec![]),
             file_dialog: egui_file_dialog::FileDialog::new(),
             modals: Modals::default(),
+            rpc: None,
         }
     }
 }
 
-impl eframe::App for Prospekt {
+impl<'a> eframe::App for Prospekt<'a> {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             egui::MenuBar::default().ui(ui, |ui| {
@@ -147,7 +165,7 @@ impl eframe::App for Prospekt {
                     );
 
                     self.dock_state.push_to_focused_leaf(Tab {
-                        id: self.dock_state.surfaces_count() as u16,
+                        // id: self.dock_state.surfaces_count() as u16,
                         vtf: Some(vtf),
                         texture: Some(texture),
                         thumbnail: Some(thumbnail),
@@ -163,10 +181,23 @@ impl eframe::App for Prospekt {
                 });
             }
 
+            let mut tab_viewer = MainTabViewer { focused_tab: None };
             egui_dock::DockArea::new(&mut self.dock_state)
                 .show_leaf_collapse_buttons(false)
                 .style(egui_dock::Style::from_egui(ui.style().as_ref()))
-                .show_inside(ui, &mut MainTabViewer);
+                .show_inside(ui, &mut tab_viewer);
+
+            if let Some(rpc) = &mut self.rpc {
+                let num_tabs = self.dock_state.main_surface().num_tabs();
+                if let Some(tab) = tab_viewer.focused_tab
+                    && num_tabs > 0
+                {
+                    let _ = rpc.set_activity(presence::status(&format!("Editing {}", &tab)));
+                }
+                if num_tabs == 0 {
+                    let _ = rpc.set_activity(presence::status(&"No files open".to_string()));
+                }
+            }
         });
     }
 }
