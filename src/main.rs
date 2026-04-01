@@ -62,12 +62,8 @@ fn main() -> eframe::Result {
             application.settings = Some(&mut prefs);
 
             if application.settings.as_ref().clone().unwrap().rpc != settings::RPCSetting::None {
-                let activity = discord_rich_presence::activity::Activity::new()
-                    .buttons(vec![discord_rich_presence::activity::Button::new(
-                        "GitHub",
-                        "https://github.com/mikesk8r/prospekt",
-                    )])
-                    .state("No files open");
+                let no_files = "No files open".to_string();
+                let activity = presence::status(&no_files);
                 let _ = rpc.set_activity(activity);
             }
 
@@ -159,17 +155,16 @@ impl<'a> eframe::App for Prospekt<'a> {
                 let string = format!("{}", &path.display());
 
                 if string.ends_with(".vtf") {
-                    let vtf = headcrab_vtf::VTF::from_bytes(file.unwrap().as_slice());
+                    let vtf = headcrab_vtf::VTF::from_bytes(file.unwrap().as_slice()).unwrap();
 
                     let mut i: usize = 0;
                     let mut buffer: Vec<egui::Color32> = vec![];
                     // TODO: add support for looking at mipmaps/frames
-                    // also note to self: fix weird index bug :p
-                    while i < vtf.texture.data[1][1].len() {
+                    while i < vtf.texture.data[0][0].len() {
                         buffer.push(egui::Color32::from_rgb(
-                            vtf.texture.data[1][1][i] as u8,
-                            vtf.texture.data[1][1][i + 1] as u8,
-                            vtf.texture.data[1][1][i + 2] as u8,
+                            vtf.texture.data[0][0][i] as u8,
+                            vtf.texture.data[0][0][i + 1] as u8,
+                            vtf.texture.data[0][0][i + 2] as u8,
                         ));
                         i += 4;
                     }

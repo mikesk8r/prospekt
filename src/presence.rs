@@ -1,6 +1,8 @@
-pub fn status<'a>(current: &'a String) -> discord_rich_presence::activity::Activity<'a> {
-    let activity = discord_rich_presence::activity::Activity::new()
-        .buttons(vec![discord_rich_presence::activity::Button::new(
+use discord_rich_presence::activity::*;
+
+pub fn status<'a>(current: &'a String) -> Activity<'a> {
+    let activity = Activity::new()
+        .buttons(vec![Button::new(
             "GitHub",
             "https://github.com/mikesk8r/prospekt",
         )])
