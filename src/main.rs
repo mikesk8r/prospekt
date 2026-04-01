@@ -6,8 +6,10 @@ use eframe::egui;
 
 mod modals;
 mod presence;
+mod settings;
 mod tabs;
 
+use settings::Settings;
 use tabs::*;
 
 fn main() -> eframe::Result {
@@ -17,14 +19,38 @@ fn main() -> eframe::Result {
     };
     let mut rpc = discord_rich_presence::DiscordIpcClient::new("1488668810906046515");
 
+    let args = std::env::args().collect::<Vec<String>>();
+    #[cfg(windows)]
+    let settings_path = format!(
+        "{}\\prospekt.toml",
+        std::path::Path::new(&args[0])
+            .canonicalize()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .as_os_str()
+            .to_str()
+            .unwrap()
+    );
+    #[cfg(not(windows))]
+    let settings_path = format!(
+        "{}/prospekt.toml",
+        std::path::Path::new(&args[0])
+            .canonicalize()
+            .parent()
+            .unwrap()
+            .unwrap()
+            .as_os_str()
+            .to_str()
+            .unwrap()
+    );
+
+    let mut prefs = match std::fs::read_to_string(&settings_path) {
+        Ok(str) => toml::from_str(str.as_str()).expect("invalid settings"),
+        Err(_) => Settings::default(),
+    };
+
     let _ = rpc.connect();
-    let activity = discord_rich_presence::activity::Activity::new()
-        .buttons(vec![discord_rich_presence::activity::Button::new(
-            "GitHub",
-            "https://github.com/mikesk8r/prospekt",
-        )])
-        .state("No files open");
-    let _ = rpc.set_activity(activity);
     let result = eframe::run_native(
         "Prospekt",
         options,
@@ -33,6 +59,18 @@ fn main() -> eframe::Result {
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
             let mut application = Prospekt::default();
+            application.settings = Some(&mut prefs);
+
+            if application.settings.as_ref().clone().unwrap().rpc != settings::RPCSetting::None {
+                let activity = discord_rich_presence::activity::Activity::new()
+                    .buttons(vec![discord_rich_presence::activity::Button::new(
+                        "GitHub",
+                        "https://github.com/mikesk8r/prospekt",
+                    )])
+                    .state("No files open");
+                let _ = rpc.set_activity(activity);
+            }
+
             application.rpc = Some(&mut rpc);
 
             Ok(Box::from(application))
@@ -40,6 +78,10 @@ fn main() -> eframe::Result {
     );
     let _ = rpc.clear_activity();
     let _ = rpc.close();
+    let _ = std::fs::write(
+        settings_path,
+        toml::to_string_pretty(&prefs).unwrap().as_bytes(),
+    );
     result
 }
 
@@ -47,6 +89,7 @@ fn main() -> eframe::Result {
 struct Modals {
     about: bool,
     controls: bool,
+    settings: bool,
 }
 
 struct Prospekt<'a> {
@@ -54,6 +97,7 @@ struct Prospekt<'a> {
     file_dialog: egui_file_dialog::FileDialog,
     pub rpc: Option<&'a mut discord_rich_presence::DiscordIpcClient>,
     modals: Modals,
+    pub settings: Option<&'a mut Settings>,
 }
 
 impl<'a> Default for Prospekt<'a> {
@@ -63,6 +107,7 @@ impl<'a> Default for Prospekt<'a> {
             file_dialog: egui_file_dialog::FileDialog::new(),
             modals: Modals::default(),
             rpc: None,
+            settings: None,
         }
     }
 }
@@ -78,6 +123,11 @@ impl<'a> eframe::App for Prospekt<'a> {
 
                     if ui.button("Quit").clicked() {
                         ui.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+                ui.menu_button("Edit", |ui| {
+                    if ui.button("Settings...").clicked() {
+                        self.modals.settings = true;
                     }
                 });
                 ui.menu_button("Help", |ui| {
@@ -97,7 +147,11 @@ impl<'a> eframe::App for Prospekt<'a> {
                 })
             });
 
-            modals::draw(&mut self.modals, ui);
+            let unwrapped_settings = self.settings.as_mut().unwrap().clone();
+            let previous_rpc = unwrapped_settings.rpc.clone();
+            if let Some(mut settings) = self.settings.as_mut() {
+                modals::draw(&mut self.modals, &mut settings, ui);
+            }
 
             self.file_dialog.update(ui);
             if let Some(path) = self.file_dialog.take_picked() {
@@ -189,13 +243,49 @@ impl<'a> eframe::App for Prospekt<'a> {
 
             if let Some(rpc) = &mut self.rpc {
                 let num_tabs = self.dock_state.main_surface().num_tabs();
-                if let Some(tab) = tab_viewer.focused_tab
+
+                if let Some(tab) = &tab_viewer.focused_tab
                     && num_tabs > 0
                 {
-                    let _ = rpc.set_activity(presence::status(&format!("Editing {}", &tab)));
+                    if unwrapped_settings.rpc == settings::RPCSetting::Full {
+                        let _ = rpc.set_activity(presence::status(&format!("Editing {}", &tab)));
+                    } else if unwrapped_settings.rpc == settings::RPCSetting::HideFilename {
+                        let _ = rpc.set_activity(presence::status(&"Editing a file".to_string()));
+                    }
                 }
-                if num_tabs == 0 {
+                if num_tabs == 0 && unwrapped_settings.rpc != settings::RPCSetting::None {
                     let _ = rpc.set_activity(presence::status(&"No files open".to_string()));
+                }
+
+                if unwrapped_settings.rpc != previous_rpc {
+                    match unwrapped_settings.rpc {
+                        settings::RPCSetting::None => {
+                            let _ = rpc.clear_activity();
+                        }
+                        settings::RPCSetting::HideFilename => {
+                            let editing = "Editing a file".to_string();
+                            let none = "No files open".to_string();
+
+                            let _ = rpc.set_activity(presence::status(
+                                match self.dock_state.main_surface().num_tabs() {
+                                    0 => &none,
+                                    _ => &editing,
+                                },
+                            ));
+                        }
+                        settings::RPCSetting::Full => {
+                            let editing =
+                                format!("Editing {}", &tab_viewer.focused_tab.clone().unwrap());
+                            let none = "No files open".to_string();
+
+                            let _ = rpc.set_activity(presence::status(
+                                match self.dock_state.main_surface().num_tabs() {
+                                    0 => &none,
+                                    _ => &editing,
+                                },
+                            ));
+                        }
+                    }
                 }
             }
         });

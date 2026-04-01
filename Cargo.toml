@@ -12,3 +12,5 @@ egui_extras = "0.34.1"
 env_logger = "0.11.10"
 headcrab-kv = { git = "https://github.com/mikesk8r/headcrab" }
 headcrab-vtf = { git = "https://github.com/mikesk8r/headcrab" }
+serde = "1.0.228"
+toml = "1.1.1"

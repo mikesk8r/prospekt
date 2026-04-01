@@ -1,12 +1,20 @@
 use eframe::egui;
 
-pub fn draw(modals: &mut super::Modals, ui: &mut egui::Ui) {
+pub fn draw(
+    modals: &mut super::Modals,
+    settings: &mut super::settings::Settings,
+    ui: &mut egui::Ui,
+) {
     if modals.about {
         about_modal(modals, ui);
     }
 
     if modals.controls {
         controls_modal(modals, ui);
+    }
+
+    if modals.settings {
+        settings_modal(modals, settings, ui);
     }
 }
 
@@ -49,6 +57,39 @@ fn controls_modal(modals: &mut super::Modals, ui: &mut egui::Ui) {
         // ui.add_space(15.0);
         if ui.button("OK").clicked() {
             modals.controls = false;
+        }
+    });
+}
+
+fn settings_modal(
+    modals: &mut super::Modals,
+    settings: &mut super::settings::Settings,
+    ui: &mut egui::Ui,
+) {
+    egui::Modal::new("Settings".into()).show(ui, |ui| {
+        ui.heading("Settings");
+        egui::ComboBox::from_label("Discord RPC Mode")
+            .selected_text(format!("{:?}", settings.rpc))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut settings.rpc,
+                    super::settings::RPCSetting::None,
+                    format!("{:?}", super::settings::RPCSetting::None),
+                );
+                ui.selectable_value(
+                    &mut settings.rpc,
+                    super::settings::RPCSetting::HideFilename,
+                    format!("{:?}", super::settings::RPCSetting::HideFilename),
+                );
+                ui.selectable_value(
+                    &mut settings.rpc,
+                    super::settings::RPCSetting::Full,
+                    format!("{:?}", super::settings::RPCSetting::Full),
+                );
+            });
+        ui.add_space(15.0);
+        if ui.button("Close").clicked() {
+            modals.settings = false;
         }
     });
 }
