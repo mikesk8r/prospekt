@@ -37,8 +37,8 @@ fn main() -> eframe::Result {
         "{}/prospekt.toml",
         std::path::Path::new(&args[0])
             .canonicalize()
-            .parent()
             .unwrap()
+            .parent()
             .unwrap()
             .as_os_str()
             .to_str()
